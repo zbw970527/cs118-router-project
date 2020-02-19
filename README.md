@@ -27,8 +27,7 @@ This implementation is based on the original code for Stanford CS144 lab3 (https
 
 ## TODO
 
-    ###########################################################
-    ##                                                       ##
-    ## REPLACE CONTENT OF THIS FILE WITH YOUR PROJECT REPORT ##
-    ##                                                       ##
-    ###########################################################
+Hey guys! When committing code, just follow usual best practices; work on your
+own feature branch, then merge the branch onto `master` when it's complete.
+Don't commit directly onto the `master` branch, and *never* force an overwrite
+(`git push --force`, etc; always pull before pushing, yall know the drill). 
