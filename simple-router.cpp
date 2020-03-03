@@ -22,25 +22,65 @@
 namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-// IMPLEMENT THIS METHOD
+
 void
 SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 {
-  std::cerr << "Got packet of size " << packet.size() << " on interface " << inIface << std::endl;
+  std::cerr << "Got packet of size " << packet.size() << " on interface " 
+    << inIface << std::endl;
+
+  /* Sanity check our packet */
 
   const Interface* iface = findIfaceByName(inIface);
   if (iface == nullptr) {
-    std::cerr << "Received packet, but interface is unknown, ignoring" << std::endl;
+    fprintf(stderr, "Received packet, but interface is unknown, ignoring\n"); 
     return;
   }
 
+  if (packet.size() < sizeof(ethernet_hdr)) {
+    fprintf(stderr, "Received packet, but header is truncated, ignoring\n"); 
+    return;
+  }
+
+  /* Parse the ethernet header */
+
+  uint8_t *raw_packet = packet.data(); 
+  ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
+
+  // if the packet's MAC isn't addressed to us, return. 
+  if (!isMacOfInterest(eth_hdr->ether_dhost, iface)) {
+    fprintf(stderr, "Received packet, but isn't addressed to router, "
+        "ignoring\n"); 
+    return; 
+  }
+
+
+  uint16_t eth_type = ntohs(eth_hdr->ether_type); 
+
+
+
   std::cerr << getRoutingTable() << std::endl;
-
-  // FILL THIS IN
-
 }
-//////////////////////////////////////////////////////////////////////////
+
+
+/* 
+ * returns true if the given MAC address is either 
+ * a) addressed to the broadcast MAC address. 
+ * b) addressed to the given router interface. 
+ */
+static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface)
+{
+  uint8_t broadcast_mac[ETHER_ADDR_LEN]; 
+  for (int i=0; i < ETHER_ADDR_LEN; i++) 
+     broadcast_mac[i] = 0xFFU; 
+  
+  if (memcmp(mac, broadcast_mac, ETHER_ADDR_LEN) == 0)
+     return true; 
+
+  return memcmp(mac, inputIface.addr.data(), ETHER_ADDR_LEN) == 0;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 // You should not need to touch the rest of this code.
@@ -159,3 +199,5 @@ SimpleRouter::findIfaceByName(const std::string& name) const
 
 
 } // namespace simple_router {
+
+/* vim:set expandtab shiftwidth=2 textwidth=79: */
