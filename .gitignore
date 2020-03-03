@@ -1,3 +1,4 @@
 *.o
 router
 build/*
+.vagrant
