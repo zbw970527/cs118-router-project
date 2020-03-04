@@ -90,15 +90,13 @@ ArpCache::periodicCheckArpRequestsAndCacheEntries()
   }
 
   // remove invalid cache entries.
-  // TODO: how do we free the associated packet queue?
-  std::vector<std::shared_ptr<ArpRequest>&> invalid_entries;
-
-  for (auto entry: m_cacheEntries) {
-    if (!entry->isValid) 
-      invalid_entries.append(entry); 
+  for (auto iter = m_cacheEntries.begin(); iter != m_cacheEntries.end(); ) {
+    if (!(*iter)->isValid) {
+      iter = m_cacheEntries.erase(iter);
+      continue;
+    }
+    iter++;
   }
-  for (auto entry: invalid_entries)
-    removeRequest(entry); 
 }
 
 //////////////////////////////////////////////////////////////////////////
