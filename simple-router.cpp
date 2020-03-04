@@ -19,6 +19,10 @@
 
 #include <fstream>
 
+
+static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface)
+
+
 namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
@@ -47,16 +51,28 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   uint8_t *raw_packet = packet.data(); 
   ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
 
-  // if the packet's MAC isn't addressed to us, return. 
   if (!isMacOfInterest(eth_hdr->ether_dhost, iface)) {
     fprintf(stderr, "Received packet, but isn't addressed to router, "
         "ignoring\n"); 
     return; 
   }
 
+  /* Handle the ethernet packet based on its type */
 
   uint16_t eth_type = ntohs(eth_hdr->ether_type); 
 
+  if (eth_type == ethertype_arp) {
+     handle_arp_request(raw_packet + sizeof(ethernet_hdr), iface,
+         eth_hdr->ether_dhost); 
+
+  } else if (eth_type == ethertype_ip) { 
+     handle_ip_request(raw_packet + sizeof(ethernet_hdr), iface); 
+
+  } else { 
+    fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
+    return; 
+  }
+}
 
 
   std::cerr << getRoutingTable() << std::endl;
@@ -67,6 +83,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
  * returns true if the given MAC address is either 
  * a) addressed to the broadcast MAC address. 
  * b) addressed to the given router interface. 
+ * TODO: verify; do we have to check through *all* our interfaces?
  */
 static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface)
 {
