@@ -92,7 +92,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     /* Handle ARP requests */
 
     // if the arp request isn't for us, we can exit. 
-    if (ntohl(arp_h->arp_tip) != in_iface->ip)
+    if (arp_h->arp_tip != in_iface->ip)
        return; 
 
     // prepare an output buffer for the response. 
@@ -111,7 +111,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     output_arp_h->arp_op = htons(arp_op_reply); 
     output_arp_h->arp_tip = arp_h->arp_sip; 
     memcpy(output_arp_h->arp_tha, arp_h->arp_sha, ETHER_ADDR_LEN); 
-    output_arp_h->arp_sip = htonl(in_iface->ip); 
+    output_arp_h->arp_sip = in_iface->ip; 
     memcpy(output_arp_h->arp_sha, in_iface->addr.data(), ETHER_ADDR_LEN); 
 
     // send the packet
