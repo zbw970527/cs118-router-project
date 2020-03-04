@@ -24,128 +24,20 @@
 
 namespace simple_router {
 
-void
-ArpCache::sendQueuedPackets(struct arp_hdr &reply_arp_hdr, uint32_t dest_ip_address)
-{
-  std::shared_ptr<ArpRequest> request = nullptr;
-  for(const auto& entry: m_arpRequests)
-    {
-      if(entry->ip == dest_ip_address)
-        {
-          request = entry;
-          break;
-        }
-    }
-  
-  if (request != nullptr)
-    {
-      for (const auto& pendingPacket: request->packets)
-        {
-          int packet_size = pendingPacket.packet.size();
-          Buffer curr_packet (packet_size, 0);
-          struct ethernet_hdr ether_hdr;
-          memcpy(ether_hdr.ether_dhost, &reply_arp_hdr.arp_sha[0], ETHER_ADDR_LEN);
-          memcpy(ether_hdr.ether_shost, &reply_arp_hdr.arp_tha[0], ETHER_ADDR_LEN);
-          ether_hdr.ether_type = htons(0x0800);
-          memcpy(&current_packet[0], &ether_hdr, sizeof(ether_hdr));
-          memcpy(&curr_packet[14], &pendingPacket.packet[14], packet_size - sizeof(ether_hdr));
-          std::string interfaceName = m_router.getRoutingTable().lookup(dest_ip_address).ifName;
-          const Interface* sendInterface = m_router.findIfaceByName(interfaceName);
-          m_router.sendPacket(curr_packet, sendInterface->name);
-
-          printf("Pending packet send\n");
-          std::cout << "Interface:" << sendInterface->name << std::endl;
-          print_hdrs(curr_packet);
-        }
-       m_arpRequests.remove(request);
-    }
-}
-
-void
-ArpCache::handleArpRequest(std::shared_ptr<ArpRequest> req, bool &isRemoved)
-{
-
-    printf("In handleArpRequest\n");
-    if(steady_clock::now() - req->timeSent > seconds(1))
-    {
-      if (req->nTimesSent >= MAX_SENT_TIME)/ // request time out
-        {
-          printf("Times Sent:%d\n", req->nTimesSent);
-          printf("Removing the request\n");
-          m_arpRequests.remove(req);
-          isRemoved = true;
-          return;
-        }
-
-      else
-        {
-          struct arp_hdr arp_header;
-          struct ethernet_hdr ether_hdr;
-          Buffer request_packet (42, 0); //Sending packet
-
-          std::string interfaceName = m_router.getRoutingTable().lookup(req->ip).ifName;
-          const Interface* sendInterface = m_router.findIfaceByName(interfaceName);
-
-          memset(ether_hdr.ether_dhost, 255, ETHER_ADDR_LEN);
-          memcpy(ether_hdr.ether_shost, &sendInterface->addr[0], ETHER_ADDR_LEN);
-          ether_hdr.ether_type = htons(0x0806);
-          printf("Assembled Ethernet\n");
-          print_hdr_eth((uint8_t*)&ether_hdr);
-          
-          arp_header.arp_hrd = htons(0x0001);
-          arp_header.arp_pro = htons(0x0800);
-          arp_header.arp_hln = 6;
-          arp_header.arp_pln = 4;
-          arp_header.arp_op = htons(0x0001);
-          memcpy(arp_header.arp_sha, &sendInterface->addr[0], ETHER_ADDR_LEN);
-          memcpy(&arp_header.arp_sip, &sendInterface->ip, sizeof(arp_header.arp_sip));
-          memset(arp_header.arp_tha, 255, ETHER_ADDR_LEN);
-          memcpy(&arp_header.arp_tip, &req->ip, sizeof(arp_header.arp_tip));
-
-          printf("Assembled Arp\n");
-          print_hdr_arp((uint8_t*)&arp_header);
-
-          memcpy(&request_packet[0], &ether_hdr, sizeof(ether_hdr));
-          memcpy(&request_packet[14], &arp_header, sizeof(arp_header));
-          m_router.curr_packet(request_packet, sendInterface->name);
-
-          std::cout << "Interface:" << sendInterface->name << std::endl; 
-          print_hdrs(request_packet);
-          req->timeSent = steady_clock::now();
-          req->nTimesSent++;
-        }
-    }
-}
-
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 // IMPLEMENT THIS METHOD
 void
 ArpCache::periodicCheckArpRequestsAndCacheEntries()
 {
-  bool isRemoved = false;
-  std::vector<std::shared_ptr<ArpEntry>> recordForRemoval;
-      for(const auto& req: m_arpRequests)
-        {
-          handleArpRequest(req, isRemoved);
-          if(isRemoved) //Avoid segfault
-            break;
-        }
 
-  for(const auto& entry: m_cacheEntries)
-    {
-      if(!(entry->isValid))
-        {
-          recordForRemoval.push_back(entry);
-        }
-    }
-
-  for(const auto& entry: recordForRemoval)
-    {
-      m_cacheEntries.remove(entry);
-    }
+  // FILL THIS IN
 
 }
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+// You should not need to touch the rest of this code.
 
 ArpCache::ArpCache(SimpleRouter& router)
   : m_router(router)

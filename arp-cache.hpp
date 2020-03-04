@@ -122,9 +122,6 @@ public:
 
   ~ArpCache();
 
-  void ArpCache::sendQueuedPackets(struct arp_hdr &reply_arp_hdr, uint32_t dest_ip_address);
-  void ArpCache::handleArpRequest(std::shared_ptr<ArpRequest> req, bool &isRemoved);
-
   /**
    * IMPLEMENT THIS METHOD
    *
