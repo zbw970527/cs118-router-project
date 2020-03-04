@@ -34,12 +34,11 @@ RoutingTable::lookup(uint32_t ip) const
   uint32_t highest_mask = 0; 
 
   for(auto entry: m_entries){
-    if(ip & entry->mask == entry->dest & entry->mask){ 
-      // compare the masks; more bitwise-specific masks should have a higher
-      // integer representation. 
-      if (highest_mask <= entry->mask) { 
+    if((ip & entry.mask) == (entry.dest & entry.mask)){ 
+      // compare the bitwise masks; more specific masks should be 'larger'. 
+      if (highest_mask <= entry.mask) { 
         best_match = &entry; 
-        highest_mask = entry->mask; 
+        highest_mask = entry.mask; 
       }
     }
   } 
