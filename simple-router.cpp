@@ -114,7 +114,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     memcpy(output_arp_h->arp_sha, in_iface->addr.data(), ETHER_ADDR_LEN); 
 
     // send the packet
-    Buffer output_vec = Buffer(output_buf, output_buf + output_buf_size); 
+    Buffer output_vec(output_buf, output_buf + output_buf_size); 
     sendPacket(output_vec, in_iface->name); 
 
   } else if (arp_op_type == arp_op_reply) { 

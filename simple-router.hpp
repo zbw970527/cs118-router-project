@@ -115,7 +115,7 @@ private:
   pox::PacketInjectorPrx m_pox;
 
   void handle_arp_packet(const uint8_t* arp_data, 
-          const Interface* in_iface, const uint8_t* src_mac)
+          const Interface* in_iface, const uint8_t* src_mac);
 };
 
 inline const RoutingTable&
