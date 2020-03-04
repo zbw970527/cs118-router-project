@@ -66,7 +66,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
          eth_hdr->ether_dhost); 
 
   } else if (eth_type == ethertype_ip) { 
-     handle_ip_request(raw_packet + sizeof(ethernet_hdr), iface); 
+     handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
 
   } else { 
     fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
@@ -84,11 +84,11 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
   if (ntohs(arp_hdr->arp_hrd) != arp_hrd_ethernet) 
      return; 
 
-  uint16_t arp_optype = ntohs(arp_hdr->arp_op); 
+  uint16_t arp_op_type = ntohs(arp_hdr->arp_op); 
 
-  if (arp_optype == arp_op_request) { 
+  if (arp_op_type == arp_op_request) { 
 
-    /* Respond to ARP requests */
+    /* Handle ARP requests */
 
     // if the arp request isn't for us, we can exit. 
     if (ntohl(arp_hdr->arp_tip) != in_iface->ip)
@@ -122,6 +122,9 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     /* Respond to ARP replies */
     // TODO
 
+    // TODO: do we send out the cached ARP packets *here*, or is that done
+    // automatically in the periodically run ARP cache code implemented by
+    // varun?
 
   } else { 
     // don't handle undocumented ARP packet types. 
