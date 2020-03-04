@@ -117,10 +117,18 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     Buffer output_vec = Buffer(output_buf, output_buf + output_buf_size); 
     sendPacket(output_vec, in_iface->name); 
 
-  } else if (arp_optype == arp_op_reply) { 
+  } else if (arp_op_type == arp_op_reply) { 
 
-    /* Respond to ARP replies */
-    // TODO
+    /* Handle ARP replies */
+
+    // extract information from the ARP header. 
+    uint32_t arp_source_ip = ntohl(arp_h->arp_sip); 
+    Buffer arp_source_mac; 
+    for (int i=0; i < ETHER_ADDR_LEN; i++) 
+      arp_source_mac[i] = arp_h->arp_sha[i]; 
+
+    // record the information to our ARP cache. 
+    m_arp.insertArpEntry(arp_source_mac, arp_source_ip); 
 
     // TODO: do we send out the cached ARP packets *here*, or is that done
     // automatically in the periodically run ARP cache code implemented by
