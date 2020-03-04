@@ -26,35 +26,29 @@
 namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-// IMPLEMENT THIS METHOD
+
 RoutingTableEntry
 RoutingTable::lookup(uint32_t ip) const
 {
-  RoutingTableEntry *result = NULL;
-  // load the table and check. iterate from each table item in the table.
-  if(!m_entries.empty()){
-    std::list<RoutingTableEntry>::iterator tableItem;
-    for(tableItem = m_entries.begin(); tableItem != m_entries.end(); ++tableItem){
-      uint32_t incoming_addr = ip & tableItem -> mask;
-      uint32_t table_addr = tableItem -> dest & tableItem -> mask;
-      if(incoming_addr == table_addr){ //match
-        if(result == NULL){ // update result if no previously matched
-          result = &tableItem;
-        }
-        if(result -> mask < table_addr -> mask){
-          //update the result if this is the lognest one
-          result = &tableItem;
-        }
+  RoutingTableEntry *best_match = nullptr;
+  uint32_t highest_mask = 0; 
+
+  for(auto entry: m_entries){
+    if(ip & entry->mask == entry->dest & entry->mask){ 
+      // compare the masks; more bitwise-specific masks should have a higher
+      // integer representation. 
+      if (highest_mask <= entry->mask) { 
+        best_match = &entry; 
+        highest_mask = entry->mask; 
       }
     }
-  }
-  if(result == NULL)
-    throw std::runtime_error("Routing entry not found");
+  } 
 
-  return *result;
+  if (best_match != nullptr) 
+     return *best_match;
+  throw std::runtime_error("Routing entry not found"); 
 }
-//////////////////////////////////////////////////////////////////////////
+
 //////////////////////////////////////////////////////////////////////////
 
 // You should not need to touch the rest of this code.
@@ -132,3 +126,5 @@ operator<<(std::ostream& os, const RoutingTable& table)
 }
 
 } // namespace simple_router
+
+/* vim:set expandtab shiftwidth=2 textwidth=79: */
