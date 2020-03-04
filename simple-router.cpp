@@ -20,10 +20,11 @@
 #include <fstream>
 
 
-static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface)
 
 
 namespace simple_router {
+
+static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface);
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -48,10 +49,10 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Parse the ethernet header */
 
-  uint8_t *raw_packet = packet.data(); 
+  const uint8_t *raw_packet = packet.data(); 
   ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
 
-  if (!isMacOfInterest(eth_hdr->ether_dhost, iface)) {
+  if (!isMacOfInterest(eth_hdr->ether_dhost, *iface)) {
     fprintf(stderr, "Received packet, but isn't addressed to router, "
         "ignoring\n"); 
     return; 
@@ -81,17 +82,17 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
   const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
 
   // don't handle non-ethernet requests. 
-  if (ntohs(arp_hdr->arp_hrd) != arp_hrd_ethernet) 
+  if (ntohs(arp_h->arp_hrd) != arp_hrd_ethernet) 
      return; 
 
-  uint16_t arp_op_type = ntohs(arp_hdr->arp_op); 
+  uint16_t arp_op_type = ntohs(arp_h->arp_op); 
 
   if (arp_op_type == arp_op_request) { 
 
     /* Handle ARP requests */
 
     // if the arp request isn't for us, we can exit. 
-    if (ntohl(arp_hdr->arp_tip) != in_iface->ip)
+    if (ntohl(arp_h->arp_tip) != in_iface->ip)
        return; 
 
     // prepare an output buffer for the response. 
@@ -109,7 +110,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     memcpy(output_arp_h, arp_h, sizeof(arp_hdr)); // copy in all fields
     output_arp_h->arp_op = htons(arp_op_reply); 
     output_arp_h->arp_tip = arp_h->arp_sip; 
-    memcpy(output_arp_h->arp_tha, arp_h->arp_sip, ETHER_ADDR_LEN); 
+    memcpy(output_arp_h->arp_tha, arp_h->arp_sha, ETHER_ADDR_LEN); 
     output_arp_h->arp_sip = htonl(in_iface->ip); 
     memcpy(output_arp_h->arp_sha, in_iface->addr.data(), ETHER_ADDR_LEN); 
 
