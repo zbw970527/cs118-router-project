@@ -64,7 +64,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   if (eth_type == ethertype_arp) {
      handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
-         eth_hdr->ether_dhost); 
+         eth_hdr->ether_shost); 
 
   } else if (eth_type == ethertype_ip) { 
      handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
