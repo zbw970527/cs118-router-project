@@ -20,10 +20,11 @@
 #include <fstream>
 
 
-static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface)
 
 
 namespace simple_router {
+
+static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface);
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -48,10 +49,10 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Parse the ethernet header */
 
-  uint8_t *raw_packet = packet.data(); 
+  const uint8_t *raw_packet = packet.data(); 
   ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
 
-  if (!isMacOfInterest(eth_hdr->ether_dhost, iface)) {
+  if (!isMacOfInterest(eth_hdr->ether_dhost, *iface)) {
     fprintf(stderr, "Received packet, but isn't addressed to router, "
         "ignoring\n"); 
     return; 
@@ -62,11 +63,11 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   uint16_t eth_type = ntohs(eth_hdr->ether_type); 
 
   if (eth_type == ethertype_arp) {
-     handle_arp_request(raw_packet + sizeof(ethernet_hdr), iface,
-         eth_hdr->ether_dhost); 
+     handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
+         eth_hdr->ether_shost); 
 
   } else if (eth_type == ethertype_ip) { 
-     handle_ip_request(raw_packet + sizeof(ethernet_hdr), iface); 
+     handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
 
   } else { 
     fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
@@ -75,7 +76,69 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 }
 
 
-  std::cerr << getRoutingTable() << std::endl;
+void SimpleRouter::handle_arp_packet(const uint8_t* arp_data, 
+    const Interface* in_iface, const uint8_t* src_mac)
+{
+  const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
+
+  // don't handle non-ethernet requests. 
+  if (ntohs(arp_h->arp_hrd) != arp_hrd_ethernet) 
+     return; 
+
+  uint16_t arp_op_type = ntohs(arp_h->arp_op); 
+
+  if (arp_op_type == arp_op_request) { 
+
+    /* Handle ARP requests */
+
+    // if the arp request isn't for us, we can exit. 
+    if (arp_h->arp_tip != in_iface->ip)
+       return; 
+
+    // prepare an output buffer for the response. 
+    int output_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr); 
+    uint8_t output_buf[output_buf_size]; 
+
+    // copy in the ethernet header fields. 
+    ethernet_hdr *output_eth_h = (ethernet_hdr *) output_buf; 
+    output_eth_h->ether_type = htons(ethertype_arp); 
+    memcpy(output_eth_h->ether_dhost, src_mac, ETHER_ADDR_LEN); 
+    memcpy(output_eth_h->ether_shost, in_iface->addr.data(), ETHER_ADDR_LEN); 
+
+    // copy in the ARP header information. 
+    arp_hdr *output_arp_h = (arp_hdr *) (output_buf + sizeof(ethernet_hdr)); 
+    memcpy(output_arp_h, arp_h, sizeof(arp_hdr)); // copy in all fields
+    output_arp_h->arp_op = htons(arp_op_reply); 
+    output_arp_h->arp_tip = arp_h->arp_sip; 
+    memcpy(output_arp_h->arp_tha, arp_h->arp_sha, ETHER_ADDR_LEN); 
+    output_arp_h->arp_sip = in_iface->ip; 
+    memcpy(output_arp_h->arp_sha, in_iface->addr.data(), ETHER_ADDR_LEN); 
+
+    // send the packet
+    Buffer output_vec(output_buf, output_buf + output_buf_size); 
+    sendPacket(output_vec, in_iface->name); 
+
+  } else if (arp_op_type == arp_op_reply) { 
+
+    /* Handle ARP replies */
+
+    // extract information from the ARP header. 
+    uint32_t arp_source_ip = ntohl(arp_h->arp_sip); 
+    Buffer arp_source_mac; 
+    for (int i=0; i < ETHER_ADDR_LEN; i++) 
+      arp_source_mac[i] = arp_h->arp_sha[i]; 
+
+    // record the information to our ARP cache. 
+    m_arp.insertArpEntry(arp_source_mac, arp_source_ip); 
+
+    // TODO: do we send out the cached ARP packets *here*, or is that done
+    // automatically in the periodically run ARP cache code implemented by
+    // varun?
+
+  } else { 
+    // don't handle undocumented ARP packet types. 
+    return; 
+  }
 }
 
 
