@@ -25,16 +25,80 @@
 namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-// IMPLEMENT THIS METHOD
+
 void
 ArpCache::periodicCheckArpRequestsAndCacheEntries()
 {
+  // create the broadcast address. 
+  uint8_t broadcast_mac[ETHER_ADDR_LEN]; 
+  for (int i=0; i < ETHER_ADDR_LEN; i++) 
+     broadcast_mac[i] = 0xFF; 
 
-  // FILL THIS IN
+  for (auto iter = m_arpRequests.begin(); iter != m_arpRequests.end(); ) {
+    auto request = *iter; 
 
+    /* Remove requests that have timed out */
+
+    if (request->nTimesSent >= MAX_SENT_TIME) {
+      std::cerr << "-x- -x- -x- ARP REQUEST SENT TOO MANY TIMES -x- -x- -x-\n"; 
+      iter = m_arpRequests.erase(iter);
+      continue; // don't increment the iterator; we've deleted an entry. 
+    }
+
+    /* Construct and Send an ARP request */
+
+    // construct ethernet header. 
+    ethernet_hdr arp_request_ether_header;
+    const Interface *source_interface = m_router.findIfaceByName(request->packets.front().iface);
+    memcpy(arp_request_ether_header.ether_shost, source_interface->addr.data(), ETHER_ADDR_LEN);
+    memcpy(arp_request_ether_header.ether_dhost, broadcast_mac, ETHER_ADDR_LEN); 
+    arp_request_ether_header.ether_type = htons(ethertype_arp);
+
+    // construct arp header. 
+    arp_hdr arp_request_header = {
+        htons(arp_hrd_ethernet),
+        htons(ethertype_ip),
+        ETHER_ADDR_LEN,
+        sizeof(uint32_t),
+        htons(arp_op_request)
+    };
+    memcpy(arp_request_header.arp_sha, source_interface->addr.data(), ETHER_ADDR_LEN);
+    arp_request_header.arp_sip = source_interface->ip;
+    memcpy(arp_request_header.arp_tha, broadcast_mac, ETHER_ADDR_LEN); 
+    arp_request_header.arp_tip = request->ip;
+
+    // assemble outbound packet. 
+    const size_t arp_response_min_size = sizeof(ethernet_hdr) + sizeof(arp_hdr);
+    uint8_t response_raw[arp_response_min_size];
+    memcpy(response_raw, &arp_request_ether_header, sizeof(ethernet_hdr));
+    memcpy(response_raw + sizeof(ethernet_hdr), &arp_request_header, sizeof(arp_hdr));
+    Buffer curr_arp_packet(response_raw, response_raw + arp_response_min_size);
+
+    // send the packet. 
+    m_router.sendPacket(curr_arp_packet, source_interface->name);
+
+    std::cerr << "<-- <-- <-- ETHERNET REQUEST --> --> -->" << std::endl;
+    print_hdr_eth(curr_arp_packet.data());
+    std::cerr << "<-- <-- <-- ARP REQUEST --> --> -->" << std::endl;
+    print_hdr_arp(curr_arp_packet.data() + sizeof(ethernet_hdr));
+
+    // update the queued request's data. 
+    request->timeSent = std::chrono::steady_clock::now();
+    request->nTimesSent++;
+
+    iter++; // only increment the iterator when we didn't delete an entry. 
+  }
+
+  // remove invalid cache entries.
+  for (auto iter = m_cacheEntries.begin(); iter != m_cacheEntries.end(); ) {
+    if (!(*iter)->isValid) {
+      iter = m_cacheEntries.erase(iter);
+      continue;
+    }
+    iter++;
+  }
 }
-//////////////////////////////////////////////////////////////////////////
+
 //////////////////////////////////////////////////////////////////////////
 
 // You should not need to touch the rest of this code.
@@ -168,3 +232,5 @@ operator<<(std::ostream& os, const ArpCache& cache)
 }
 
 } // namespace simple_router
+
+/* vim:set expandtab shiftwidth=2 textwidth=79: */
