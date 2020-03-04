@@ -62,7 +62,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   uint16_t eth_type = ntohs(eth_hdr->ether_type); 
 
   if (eth_type == ethertype_arp) {
-     handle_arp_request(raw_packet + sizeof(ethernet_hdr), iface,
+     handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
          eth_hdr->ether_dhost); 
 
   } else if (eth_type == ethertype_ip) { 
@@ -75,7 +75,58 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 }
 
 
-  std::cerr << getRoutingTable() << std::endl;
+void SimpleRouter::handle_arp_packet(const uint8_t* arp_data, 
+    const Interface* in_iface, const uint8_t* src_mac)
+{
+  const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
+
+  // don't handle non-ethernet requests. 
+  if (ntohs(arp_hdr->arp_hrd) != arp_hrd_ethernet) 
+     return; 
+
+  uint16_t arp_optype = ntohs(arp_hdr->arp_op); 
+
+  if (arp_optype == arp_op_request) { 
+
+    /* Respond to ARP requests */
+
+    // if the arp request isn't for us, we can exit. 
+    if (ntohl(arp_hdr->arp_tip) != in_iface->ip)
+       return; 
+
+    // prepare an output buffer for the response. 
+    int output_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr); 
+    uint8_t output_buf[output_buf_size]; 
+
+    // copy in the ethernet header fields. 
+    ethernet_hdr *output_eth_h = (ethernet_hdr *) output_buf; 
+    output_eth_h->ether_type = htons(ethertype_arp); 
+    memcpy(output_eth_h->ether_dhost, src_mac, ETHER_ADDR_LEN); 
+    memcpy(output_eth_h->ether_shost, in_iface->addr.data(), ETHER_ADDR_LEN); 
+
+    // copy in the ARP header information. 
+    arp_hdr *output_arp_h = (arp_hdr *) (output_buf + sizeof(ethernet_hdr)); 
+    memcpy(output_arp_h, arp_h, sizeof(arp_hdr)); // copy in all fields
+    output_arp_h->arp_op = htons(arp_op_reply); 
+    output_arp_h->arp_tip = arp_h->arp_sip; 
+    memcpy(output_arp_h->arp_tha, arp_h->arp_sip, ETHER_ADDR_LEN); 
+    output_arp_h->arp_sip = htonl(in_iface->ip); 
+    memcpy(output_arp_h->arp_sha, in_iface->addr.data(), ETHER_ADDR_LEN); 
+
+    // send the packet
+    Buffer output_vec = Buffer(output_buf, output_buf + output_buf_size); 
+    sendPacket(output_vec, in_iface->name); 
+
+  } else if (arp_optype == arp_op_reply) { 
+
+    /* Respond to ARP replies */
+    // TODO
+
+
+  } else { 
+    // don't handle undocumented ARP packet types. 
+    return; 
+  }
 }
 
 
