@@ -123,7 +123,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     /* Handle ARP replies */
 
     // extract information from the ARP header. 
-    uint32_t arp_source_ip = ntohl(arp_h->arp_sip); 
+    uint32_t arp_source_ip = arp_h->arp_sip; 
     Buffer arp_source_mac; 
     for (int i=0; i < ETHER_ADDR_LEN; i++) 
       arp_source_mac[i] = arp_h->arp_sha[i]; 
