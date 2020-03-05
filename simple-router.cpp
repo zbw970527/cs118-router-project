@@ -67,7 +67,8 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
          eth_hdr->ether_shost); 
 
   } else if (eth_type == ethertype_ip) { 
-     handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
+    // TODO: merge in IP code. 
+    // handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
 
   } else { 
     fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
@@ -123,17 +124,27 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
     /* Handle ARP replies */
 
     // extract information from the ARP header. 
-    uint32_t arp_source_ip = arp_h->arp_sip; 
+    uint32_t arp_source_ip = arp_h->arp_sip; // TODO: byte order? confirm. 
     Buffer arp_source_mac; 
     for (int i=0; i < ETHER_ADDR_LEN; i++) 
-      arp_source_mac[i] = arp_h->arp_sha[i]; 
+      arp_source_mac.push_back(arp_h->arp_sha[i]); 
 
-    // record the information to our ARP cache. 
-    m_arp.insertArpEntry(arp_source_mac, arp_source_ip); 
+    // record the information to our ARP cache, and retrieve the packets
+    // associated with the requests. 
+    std::shared_ptr<ArpRequest> request = 
+      m_arp.insertArpEntry(arp_source_mac, arp_source_ip); 
 
-    // TODO: do we send out the cached ARP packets *here*, or is that done
-    // automatically in the periodically run ARP cache code implemented by
-    // varun?
+    // send out the queued outbound packets waiting on our ARP request. 
+    for (auto pending_packet: request->packets) { 
+      // add the newly-discovered destination MAC to the outbound packets. 
+      ethernet_hdr *eth_h = (ethernet_hdr *) pending_packet.packet.data(); 
+      memcpy(eth_h->ether_dhost, arp_source_mac.data(), ETHER_ADDR_LEN); 
+
+      sendPacket(pending_packet.packet, pending_packet.iface); 
+    }
+      
+    // remove our now_fulfilled ARP request from the queue. 
+    m_arp.removeRequest(request); 
 
   } else { 
     // don't handle undocumented ARP packet types. 
