@@ -116,6 +116,8 @@ private:
 
   void handle_arp_packet(const uint8_t* arp_data, 
           const Interface* in_iface, const uint8_t* src_mac);
+  void handle_ip_packet(const uint8_t* buf, const Interface* in_iface, 
+          const uint8_t* src_mac, const Buffer& packet);
 };
 
 inline const RoutingTable&
