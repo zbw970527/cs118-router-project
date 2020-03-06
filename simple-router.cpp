@@ -29,8 +29,12 @@ static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface);
 //////////////////////////////////////////////////////////////////////////
 
 void
-SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
+SimpleRouter::handlePacket(const Buffer& original_packet, 
+    const std::string& inIface)
 {
+  // make a mutable copy. 
+  Buffer packet(original_packet); 
+
   std::cerr << "Got packet of size " << packet.size() << " on interface " 
     << inIface << std::endl;
 
@@ -49,7 +53,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Parse the ethernet header */
 
-  const uint8_t *raw_packet = packet.data(); 
+  uint8_t *raw_packet = packet.data(); 
   ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
 
   if (!isMacOfInterest(eth_hdr->ether_dhost, *iface)) {
@@ -60,15 +64,12 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Handle the ethernet packet based on its type */
 
-  uint16_t eth_type = ntohs(eth_hdr->ether_type); 
+  if (eth_hdr->ether_type == htons(ethertype_arp)) {
+    handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
+        eth_hdr->ether_shost); 
 
-  if (eth_type == ethertype_arp) {
-     handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
-         eth_hdr->ether_shost); 
-
-  } else if (eth_type == ethertype_ip) { 
-    // TODO: merge in IP code. 
-    // handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
+  } else if (eth_hdr->ether_type == htons(ethertype_ip)) { 
+    handle_ip_packet(packet, iface, eth_hdr->ether_shost); 
 
   } else { 
     fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
@@ -77,10 +78,10 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 }
 
 
-void SimpleRouter::handle_arp_packet(const uint8_t* arp_data, 
-    const Interface* in_iface, const uint8_t* src_mac)
+void SimpleRouter::handle_arp_packet(uint8_t* arp_data, const Interface* in_iface,
+    uint8_t* src_mac)
 {
-  const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
+  arp_hdr* arp_h = (arp_hdr *) arp_data; 
 
   // don't handle non-ethernet requests. 
   if (ntohs(arp_h->arp_hrd) != arp_hrd_ethernet) 
@@ -153,7 +154,7 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
 }
 
 
-void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
+void SimpleRouter::handle_ip_packet(Buffer packet, const Interface* in_iface,
     uint8_t* src_mac) 
 { 
   ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
@@ -221,7 +222,7 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
       // send the packet. 
       Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
           + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
-      sendPacket(outbound, *in_iface); 
+      sendPacket(outbound, in_iface->name); 
       free(icmp_packet); 
       return; 
 
