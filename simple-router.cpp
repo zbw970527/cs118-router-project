@@ -273,7 +273,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   out_ip_h->ip_ttl--; 
   // recompute the IP checksum. 
   out_ip_h->ip_sum = 0x0; 
-  out_ip_h->ip_sum = cksum(ip_hdr, sizeof(ip_hdr)); 
+  out_ip_h->ip_sum = cksum(out_ip_h, sizeof(ip_hdr)); 
 
   // if we don't yet know the destination MAC address, send a request and put
   // the packet in the ARP queue. 
