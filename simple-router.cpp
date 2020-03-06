@@ -187,6 +187,11 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   // check if the packet is destined for a router interface. 
   if (findIfaceByIp(ip_h->ip_dst) != nullptr) { 
 
+    if (ip_h->ip_p != ip_protocol_icmp) { 
+      fprintf(stderr, "Received IP packet, but unknown protocol, ignoring\n"); 
+      return; 
+    }
+
     /* Assemble ICMP response */
 
     // copy the packet. 
