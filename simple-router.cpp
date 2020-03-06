@@ -77,8 +77,8 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 }
 
 
-void SimpleRouter::handle_arp_packet(const uint8_t* arp_data, 
-    const Interface* in_iface, const uint8_t* src_mac)
+void SimpleRouter::handle_arp_packet(uint8_t* arp_data, Interface* in_iface,
+    uint8_t* src_mac)
 {
   const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
 
