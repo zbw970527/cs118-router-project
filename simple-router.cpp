@@ -154,7 +154,7 @@ void SimpleRouter::handle_arp_packet(uint8_t* arp_data, const Interface* in_ifac
 }
 
 
-void SimpleRouter::handle_ip_packet(Buffer packet, const Interface* in_iface,
+void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     uint8_t* src_mac) 
 { 
   ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
