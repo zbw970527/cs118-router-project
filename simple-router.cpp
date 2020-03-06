@@ -119,6 +119,7 @@ void SimpleRouter::handle_arp_packet(uint8_t* arp_data, const Interface* in_ifac
     // send the packet
     Buffer output_vec(output_buf, output_buf + output_buf_size); 
     sendPacket(output_vec, in_iface->name); 
+    return; 
 
   } else if (arp_op_type == arp_op_reply) { 
 
@@ -146,9 +147,12 @@ void SimpleRouter::handle_arp_packet(uint8_t* arp_data, const Interface* in_ifac
       
     // remove our now_fulfilled ARP request from the queue. 
     m_arp.removeRequest(request); 
+    return; 
 
   } else { 
     // don't handle undocumented ARP packet types. 
+    fprintf(stderr, "Received ARP packet, but ARP type is unknown, "
+        "ignoring\n"); 
     return; 
   }
 }
@@ -186,7 +190,6 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
 
   // check if the packet is destined for a router interface. 
   if (findIfaceByIp(ip_h->ip_dst) != nullptr) { 
-
     if (ip_h->ip_p != ip_protocol_icmp) { 
       fprintf(stderr, "Received IP packet, but unknown protocol, ignoring\n"); 
       return; 
@@ -194,7 +197,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
 
     /* Assemble ICMP response */
 
-    // copy the packet. 
+    // copy the packet into a new, outbound packet buffer. 
     uint8_t *icmp_packet = (uint8_t *) malloc(packet.size()); 
     memcpy(icmp_packet, packet.data(), packet.size()); 
     ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
@@ -249,15 +252,14 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
         "dropping\n"); 
     return; 
   }
-
   const Interface *fwd_iface = findIfaceByName(routing_entry.ifName);
   if (fwd_iface == nullptr) { 
     fprintf(stderr, "Unknown outbound interface in routing table, dropping\n"); 
     return; 
   }
 
+  // if a packet dies of old age, send a ICMP timeout response. 
   if (ip_h->ip_ttl == 0){
-    // send ICMP timeout response
     send_icmp_t3_packet(packet, in_iface, 11, 0); 
   } 
 
@@ -277,6 +279,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   // add the destination MAC, then send the packet. 
   memcpy(out_eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN); 
   sendPacket(out_packet, fwd_iface->name);
+  return; 
 }
 
 
