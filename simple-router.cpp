@@ -189,12 +189,13 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
     /* Assemble ICMP response */
 
     // copy the packet. 
-    uint8_t *icmp_packet = malloc(sizeof(ethernet_hdr) + sizeof(ip_hdr)
-        + sizeof(icmp_hdr)); 
+    uint8_t *icmp_packet = (uint8_t *) malloc(sizeof(ethernet_hdr)
+        + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
     ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
     ip_hdr *icmp_ip_h = (ip_hdr *) (icmp_packet + sizeof(ethernet_hdr));
     icmp_hdr *icmp_icmp_h = (icmp_hdr *) (icmp_packet + sizeof(ethernet_hdr)
         + sizeof(ip_hdr)); 
+
 
     // return to sender, address unknown, no such number, no such zone. 
     //       -- elvis presley
@@ -207,7 +208,6 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
     icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_hdr); // TODO big hdrs
     icmp_ip_h->ip_sum = 0x0; 
     icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
-
 
     // if inbound ICMP request is an echo request: 
     if (icmp_icmp_h->icmp_type == 0x8) { 
@@ -225,7 +225,7 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
       free(icmp_packet); 
       return; 
 
-    } else { 
+    } else { // not an echo request. 
       // send ICMP port unreachable. 
       icmp_icmp_t3_h = (icmp_t3_hdr *) icmp_icmp_h; 
       size_t icmp_packet_size = sizeof(ethernet_hdr) + sizeof(ip_hdr)
@@ -271,10 +271,6 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
     // TODO: discard packet, send ICMP timed out request. 
     ; 
   } 
-
-
-
-
 
 
 
