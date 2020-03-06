@@ -153,114 +153,122 @@ void SimpleRouter::handle_arp_packet(const uint8_t* arp_data,
 }
 
 
-void SimpleRouter::handle_ip_packet(const uint8_t* buf, const Interface* in_iface, const uint8_t* src_mac, const Buffer& packet){
-  printf("in handle ip\n");
-  //convert the ip packet to struct
-  ip_hdr *iphdr = (ip_hdr *)(buf);
-  //check sum first
-  if(cksum(iphdr, sizeof((*iphdr))) == 0xffff){
-    printf("check sum good\n");
-    //add source to arp table if not exist
-    if(m_arp.lookup(iphdr->ip_src) == nullptr){
-      printf("add source to arp table\n");
-      //Buffer mac_buffer(src_mac, src_mac + sizeof(src_mac));
-      Buffer mac_buffer((*src_mac));
-      printf("hey buffer is good\n");
-      m_arp.insertArpEntry(mac_buffer ,iphdr -> ip_src);
-    }
-    //Buffer(std::begin(eth_hdr -> ether_dhost),std::end(eth_hdr -> ether_dhost));
-    printf("find destination interface\n");
-    // find output interface by the ip destination
+void SimpleRouter::handle_ip_packet(uint8_t* packet, size_t packet_size,
+    Interface* in_iface, uint8_t* src_mac, Buffer& packet_vec) 
+{ 
+  ip_hdr *ip_h = (ip_hdr *) packet;
 
-    std::cout<<ipToString(iphdr -> ip_dst);
+  /* Sanity check packet */
 
-    RoutingTableEntry entry = m_routingTable.lookup(iphdr -> ip_dst);
-    std::cout << entry.ifName;
-    printf("routing table gives out interface\n");
-    const Interface *fwdIf = findIfaceByName(entry.ifName);
-
-    std::cout << fwdIf->name;
-    printf("interface found above\n");
-    // destination is not router
-    if(fwdIf){
-      printf("not null!!\n");
-    }
-
-    if(fwdIf->name.compare(in_iface->name) != 0){
-      printf("destination not router\n");
-      uint8_t ttl = iphdr -> ip_ttl - 1;
-      iphdr -> ip_ttl = ttl;
-      // forward the packet
-      if(ttl <= 0){
-        printf("ttl <= 0\n");
-        //ttl<0, discard and send ICMP
-
-        // if the destination info is stored in the arp cache
-      }else if(m_arp.lookup(iphdr->ip_dst) != nullptr){
-        printf("destination is in arp cache\n");
-        try{
-
-          iphdr -> ip_sum = 0x0000;
-          iphdr -> ip_sum = cksum(iphdr, sizeof(iphdr));//?
-
-
-          std::shared_ptr<simple_router::ArpEntry> dest_mac;
-          if(ipToString(entry.dest).compare("0.0.0.0") == 0)
-             dest_mac = m_arp.lookup(iphdr -> ip_dst);
-          else
-             dest_mac = m_arp.lookup(entry.dest);
-
-          // prepare an output buffer for the response.
-          int output_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr);
-          uint8_t output_buf[output_buf_size];
-          printf("in ip handler 1\n");
-          // copy in the ethernet header fields.
-          ethernet_hdr *output_eth_h = (ethernet_hdr *) output_buf;
-          output_eth_h->ether_type = htons(ethertype_ip);
-          // !!!!!!!!!!!!!!!!!!!!`
-          // need attention
-          // !!!!!!!!!!!!!!!!!!!!`
-          // copy destination and source info into new eth header
-          memcpy(output_eth_h->ether_dhost, (dest_mac->mac).data(), ETHER_ADDR_LEN);
-          memcpy(output_eth_h->ether_shost, fwdIf->addr.data(), ETHER_ADDR_LEN);
-
-          // copy in the IP header information.
-          ip_hdr *output_ip_h = (ip_hdr *) (output_buf + sizeof(ethernet_hdr));
-          memcpy(output_ip_h, iphdr, sizeof((*iphdr))); // copy in all fields
-          output_ip_h->ip_src = fwdIf->ip;
-
-          // do not fotget to add ip data part to the packet
-
-          // send the packet
-          Buffer output_pkt(output_buf, output_buf + output_buf_size);
-          print_hdrs(output_pkt);
-          sendPacket(output_pkt, fwdIf->name);
-          printf("ip packet send\n");
-        }catch(std::runtime_error& error){ //no record in forward table
-          printf("no match\n");
-        }
-      }else{
-        printf("look arp cache\n");
-        // if the destination info is NOT stored in the arp cache
-        m_arp.queueRequest(iphdr -> ip_dst, packet, fwdIf->name);
-      }
-
-    }else{ // destination is router
-      printf("destination is router\n");
-      // handle ICMP packet
-      if(iphdr -> ip_p == 0x01){
-        printf("jump to handle icmp packet\n");
-      }//ICMP message
-        //handle icmp message
-      else{ // send icmp port unreachable
-        printf("send icmp port unreachable\n");
-      }
-    }
-    //
-  }else{
-    printf("check sum error\n");
-    //check sum wrong, drop it
+  if (packet_size < sizeof(ip_hdr)) {
+    fprintf(stderr, "Received IP packet, but header is truncated, ignoring\n"); 
+    return;
   }
+  // verify packet checksum. 
+  uint16_t ip_cksum = ip_h->ip_sum; 
+  ip_h->ip_sum = 0x0; 
+  if (cksum(ip_h, sizeof(ip_hdr)) != ip_cksum) { 
+    fprintf(stderr, "Received IP packet, but checksum corrupted, dropping\n"); 
+    return; 
+  }
+
+  /* Parse packet header */
+
+  // add source MAC address to the ARP cache. 
+  if(m_arp.lookup(ip_h->ip_src) == nullptr) {
+    //Buffer mac_buffer(src_mac, src_mac + sizeof(src_mac));
+    Buffer src_mac_vec(src_mac, src_mac + ETHER_ADDR_LEN);
+    m_arp.insertArpEntry(src_mac_vec, ip_h->ip_src);
+  }
+
+  // check if the packet is destined for a router interface. 
+  if (findIfaceByIp(ip_h->ip_dst) != nullptr) { 
+    printf("destination is router\n");
+    // TODO: 
+    // handle ICMP packet
+    if(ip_h -> ip_p == 0x01){
+      printf("jump to handle icmp packet\n");
+    }//ICMP message
+    //handle icmp message
+    else{ // send icmp port unreachable
+      printf("send icmp port unreachable\n");
+    }
+  }
+
+  /* Forward packet */
+
+  // query routing table for outbound interface. 
+  RoutingTableEntry routing_entry; 
+  try { 
+    routing_entry = m_routingTable.lookup(ip_h->ip_dst);
+  } catch (...) { 
+    fprintf(stderr, "Recieved IP packet, but no routing table entry found, "
+        "dropping\n"); 
+    return; 
+  }
+
+  const Interface *fwdIf = findIfaceByName(routing_entry.ifName);
+  if (fwdIf == nullptr) { 
+    fprintf(stderr, "Unknown outbound interface in routing table, dropping\n"); 
+    return; 
+  }
+
+  if(fwdIf->name.compare(in_iface->name) != 0){
+    printf("destination not router\n");
+    uint8_t ttl = ip_h -> ip_ttl - 1;
+    ip_h -> ip_ttl = ttl;
+    // forward the packet
+    if(ttl <= 0){
+      printf("ttl <= 0\n");
+      //ttl<0, discard and send ICMP
+
+      // if the destination info is stored in the arp cache
+    }else if(m_arp.lookup(ip_h->ip_dst) != nullptr){
+      printf("destination is in arp cache\n");
+      try{
+
+        std::shared_ptr<simple_router::ArpEntry> dest_mac;
+        if(ipToString(entry.dest).compare("0.0.0.0") == 0)
+           dest_mac = m_arp.lookup(ip_h -> ip_dst);
+        else
+           dest_mac = m_arp.lookup(entry.dest);
+
+        // prepare an output buffer for the response.
+        int output_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr);
+        uint8_t output_buf[output_buf_size];
+        printf("in ip handler 1\n");
+        // copy in the ethernet header fields.
+        ethernet_hdr *output_eth_h = (ethernet_hdr *) output_buf;
+        output_eth_h->ether_type = htons(ethertype_ip);
+        // !!!!!!!!!!!!!!!!!!!!`
+        // need attention
+        // !!!!!!!!!!!!!!!!!!!!`
+        // copy destination and source info into new eth header
+        memcpy(output_eth_h->ether_dhost, (dest_mac->mac).data(), ETHER_ADDR_LEN);
+        memcpy(output_eth_h->ether_shost, fwdIf->addr.data(), ETHER_ADDR_LEN);
+
+        // copy in the IP header information.
+        ip_hdr *output_ip_h = (ip_hdr *) (output_buf + sizeof(ethernet_hdr));
+        memcpy(output_ip_h, ip_h, sizeof((*ip_h))); // copy in all fields
+        output_ip_h->ip_src = fwdIf->ip;
+
+        // do not fotget to add ip data part to the packet
+
+        // send the packet
+        Buffer output_pkt(output_buf, output_buf + output_buf_size);
+        print_hdrs(output_pkt);
+        sendPacket(output_pkt, fwdIf->name);
+        printf("ip packet send\n");
+      } catch(std::runtime_error& error){ //no record in forward table
+        printf("no match\n");
+      }
+    }else{
+      printf("look arp cache\n");
+      // if the destination info is NOT stored in the arp cache
+      m_arp.queueRequest(ip_h -> ip_dst, packet, fwdIf->name);
+    }
+
+  }  
 }
 
 
