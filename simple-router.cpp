@@ -213,7 +213,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     icmp_ip_h->ip_dst = ip_h->ip_src; 
 
     icmp_ip_h->ip_ttl = 64; 
-    icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_hdr); // TODO big hdrs
+    icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_hdr)); // TODO big hdrs
     icmp_ip_h->ip_sum = 0x0; 
     icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
 
@@ -312,7 +312,7 @@ void SimpleRouter::send_icmp_t3_packet(Buffer &packet,
   // initialize IP header fields. 
   icmp_ip_h->ip_ttl = 64; 
   icmp_ip_h->ip_p = ip_protocol_icmp; 
-  icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_t3_hdr); // TODO big hdrs
+  icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr)); // TODO big hdrs
   icmp_ip_h->ip_sum = 0x0; 
   icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
 
