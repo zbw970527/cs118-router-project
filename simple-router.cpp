@@ -211,20 +211,42 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
 
     // if inbound ICMP request is an echo request: 
     if (icmp_icmp_h->icmp_type == 0x8) { 
-       icmp_icmp_h->icmp_type = 0x0; // echo reply
-       icmp_icmp_h->icmp_code = 0x0; 
-       icmp_icmp_h->icmp_sum = 0x0;
-       icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
+      // send ICMP echo reply. 
+      icmp_icmp_h->icmp_type = 0x0; // echo reply type
+      icmp_icmp_h->icmp_code = 0x0; 
 
-       Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
-           + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+      icmp_icmp_h->icmp_sum = 0x0;
+      icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
 
-       sendPacket(outbound, *in_iface); 
-       free(icmp_packet); 
-       return; 
+      // send the packet. 
+      Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
+          + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+      sendPacket(outbound, *in_iface); 
+      free(icmp_packet); 
+      return; 
+
+    } else { 
+      // send ICMP port unreachable. 
+      icmp_icmp_t3_h = (icmp_t3_hdr *) icmp_icmp_h; 
+      size_t icmp_packet_size = sizeof(ethernet_hdr) + sizeof(ip_hdr)
+        + sizeof(icmp_t3_hdr); 
+      icmp_packet = (uint8_t *) realloc(icmp_packet, icmp_packet_size); 
+
+      // fill in icmp-port-unreachable request. 
+      icmp_icmp_t3_h->icmp_type = 0x3; 
+      icmp_icmp_t3_h->icmp_code = 0x3; 
+      icmp_icmp_t3_h->unused = 0x0; 
+      memcpy(icmp_icmp_t3_h->data, ip_h, ICMP_DATA_SIZE); 
+
+      icmp_icmp_h->icmp_sum = 0x0;
+      icmp_icmp_h->icmp_sum = cksum(icmp_icmp_t3_h, sizeof(icmp_t3_hdr));
+
+      // send the packet. 
+      Buffer outbound(icmp_packet, icmp_packet + icmp_packet_size); 
+      sendPacket(outbound, *in_iface); 
+      free(icmp_packet); 
+      return; 
     }
-
-    // TODO: more icmp code
   }
 
   /* Forward packet */
