@@ -114,8 +114,12 @@ private:
   friend class Router;
   pox::PacketInjectorPrx m_pox;
 
-  void handle_arp_packet(uint8_t* arp_data, Interface* in_iface, 
-          uint8_t* src_mac);
+  void handle_arp_packet(uint8_t* arp_data, const Interface* in_iface,
+          uint8_t* src_mac); 
+  void handle_ip_packet(Buffer &packet, const Interface* in_iface,
+          uint8_t* src_mac); 
+  void send_icmp_t3_packet(Buffer &packet, const Interface* in_iface, 
+          uint8_t icmp_type, uint8_t icmp_code); 
 };
 
 inline const RoutingTable&

@@ -19,7 +19,7 @@
 
 #include <fstream>
 
-
+#include <inttypes.h>
 
 
 namespace simple_router {
@@ -29,8 +29,12 @@ static bool isMacOfInterest(const uint8_t* mac, const Interface& inputIface);
 //////////////////////////////////////////////////////////////////////////
 
 void
-SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
+SimpleRouter::handlePacket(const Buffer& original_packet, 
+    const std::string& inIface)
 {
+  // make a mutable copy. 
+  Buffer packet(original_packet); 
+
   std::cerr << "Got packet of size " << packet.size() << " on interface " 
     << inIface << std::endl;
 
@@ -49,7 +53,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Parse the ethernet header */
 
-  const uint8_t *raw_packet = packet.data(); 
+  uint8_t *raw_packet = packet.data(); 
   ethernet_hdr *eth_hdr = (ethernet_hdr *) raw_packet; 
 
   if (!isMacOfInterest(eth_hdr->ether_dhost, *iface)) {
@@ -60,15 +64,12 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   /* Handle the ethernet packet based on its type */
 
-  uint16_t eth_type = ntohs(eth_hdr->ether_type); 
+  if (eth_hdr->ether_type == htons(ethertype_arp)) {
+    handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
+        eth_hdr->ether_shost); 
 
-  if (eth_type == ethertype_arp) {
-     handle_arp_packet(raw_packet + sizeof(ethernet_hdr), iface,
-         eth_hdr->ether_shost); 
-
-  } else if (eth_type == ethertype_ip) { 
-    // TODO: merge in IP code. 
-    // handle_ip_packet(raw_packet + sizeof(ethernet_hdr), iface); 
+  } else if (eth_hdr->ether_type == htons(ethertype_ip)) { 
+    handle_ip_packet(packet, iface, eth_hdr->ether_shost); 
 
   } else { 
     fprintf(stderr, "Received packet, but type is unknown, ignoring\n"); 
@@ -77,10 +78,10 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 }
 
 
-void SimpleRouter::handle_arp_packet(uint8_t* arp_data, Interface* in_iface,
+void SimpleRouter::handle_arp_packet(uint8_t* arp_data, const Interface* in_iface,
     uint8_t* src_mac)
 {
-  const arp_hdr* arp_h = (const arp_hdr *) arp_data; 
+  arp_hdr* arp_h = (arp_hdr *) arp_data; 
 
   // don't handle non-ethernet requests. 
   if (ntohs(arp_h->arp_hrd) != arp_hrd_ethernet) 
@@ -118,6 +119,7 @@ void SimpleRouter::handle_arp_packet(uint8_t* arp_data, Interface* in_iface,
     // send the packet
     Buffer output_vec(output_buf, output_buf + output_buf_size); 
     sendPacket(output_vec, in_iface->name); 
+    return; 
 
   } else if (arp_op_type == arp_op_reply) { 
 
@@ -145,11 +147,196 @@ void SimpleRouter::handle_arp_packet(uint8_t* arp_data, Interface* in_iface,
       
     // remove our now_fulfilled ARP request from the queue. 
     m_arp.removeRequest(request); 
+    return; 
 
   } else { 
     // don't handle undocumented ARP packet types. 
+    fprintf(stderr, "Received ARP packet, but ARP type is unknown, "
+        "ignoring\n"); 
     return; 
   }
+}
+
+
+void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
+    uint8_t* src_mac) 
+{ 
+  ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
+  ip_hdr *ip_h = (ip_hdr *) (packet.data() + sizeof(ethernet_hdr));
+
+  /* Sanity check packet */
+
+  if (packet.size() < sizeof(ethernet_hdr) + sizeof(ip_hdr)) {
+    fprintf(stderr, "Received IP packet, but header is truncated, ignoring\n"); 
+    return;
+  }
+  // verify packet checksum. 
+  uint16_t ip_cksum = ip_h->ip_sum; 
+  ip_h->ip_sum = 0x0; 
+  if (cksum(ip_h, sizeof(ip_hdr)) != ip_cksum) { 
+    fprintf(stderr, "Received IP packet, but checksum corrupted, ignoring\n"); 
+    return; 
+  }
+
+  /* Parse packet header */
+
+  // add source MAC address to the ARP cache. 
+  if(m_arp.lookup(ip_h->ip_src) == nullptr) {
+    Buffer src_mac_vec(src_mac, src_mac + ETHER_ADDR_LEN);
+    m_arp.insertArpEntry(src_mac_vec, ip_h->ip_src);
+  }
+
+  /* Respond to router-bound packets */
+
+  // check if the packet is destined for a router interface. 
+  if (findIfaceByIp(ip_h->ip_dst) != nullptr) { 
+    if (ip_h->ip_p != ip_protocol_icmp) { 
+      fprintf(stderr, "Received IP packet, but unknown protocol, ignoring\n"); 
+      return; 
+    }
+
+    /* Assemble ICMP response */
+
+    // copy the packet into a new, outbound packet buffer. 
+    uint8_t *icmp_packet = (uint8_t *) malloc(packet.size()); 
+    memcpy(icmp_packet, packet.data(), packet.size()); 
+    ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
+    ip_hdr *icmp_ip_h = (ip_hdr *) (icmp_packet + sizeof(ethernet_hdr));
+    icmp_hdr *icmp_icmp_h = (icmp_hdr *) (icmp_packet + sizeof(ethernet_hdr)
+        + sizeof(ip_hdr)); 
+
+    // return to sender, address unknown, no such number, no such zone. 
+    //       -- elvis presley
+    memcpy(icmp_eth_h->ether_shost, eth_h->ether_dhost, ETHER_ADDR_LEN); 
+    memcpy(icmp_eth_h->ether_dhost, eth_h->ether_shost, ETHER_ADDR_LEN); 
+    icmp_ip_h->ip_src = ip_h->ip_dst; 
+    icmp_ip_h->ip_dst = ip_h->ip_src; 
+
+    icmp_ip_h->ip_ttl = 64; 
+    icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_hdr)); // TODO big hdrs
+    icmp_ip_h->ip_sum = 0x0; 
+    icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
+
+    /* Send Ping / Port Unreachable responses */
+
+    if (icmp_icmp_h->icmp_type == 0x8) { 
+      // send ICMP echo reply. 
+      icmp_icmp_h->icmp_type = 0x0; // echo reply type
+      icmp_icmp_h->icmp_code = 0x0; 
+
+      icmp_icmp_h->icmp_sum = 0x0;
+      icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
+
+      // send the packet. 
+      Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
+          + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+      sendPacket(outbound, in_iface->name); 
+      free(icmp_packet); 
+      return; 
+
+    } else { // not an echo request. 
+      // send ICMP port unreachable reply. 
+      send_icmp_t3_packet(packet, in_iface, 3, 3) ; 
+      return; 
+    }
+  }
+
+  /* Forward packet */
+
+  // query routing table for outbound interface. 
+  RoutingTableEntry routing_entry; 
+  try { 
+    routing_entry = m_routingTable.lookup(ip_h->ip_dst);
+  } catch (...) { 
+    fprintf(stderr, "Recieved IP packet, but no routing table entry found, "
+        "dropping\n"); 
+    return; 
+  }
+  const Interface *fwd_iface = findIfaceByName(routing_entry.ifName);
+  if (fwd_iface == nullptr) { 
+    fprintf(stderr, "Unknown outbound interface in routing table, dropping\n"); 
+    return; 
+  }
+
+  // if a packet dies of old age, send a ICMP timeout response. 
+  if (ip_h->ip_ttl <= 1){
+    send_icmp_t3_packet(packet, in_iface, 11, 0); 
+  } 
+
+  // prepare an output buffer for the output packet.
+  Buffer out_packet(packet); 
+  ethernet_hdr *out_eth_h = (ethernet_hdr *) out_packet.data();
+  memcpy(out_eth_h->ether_shost, fwd_iface->addr.data(), ETHER_ADDR_LEN);
+
+  // decrement the outbound packet's TTL. 
+  ip_hdr *out_ip_h = (ip_hdr *) (out_packet.data() + sizeof(ethernet_hdr)); 
+  ip_hdr->ip_ttl--; 
+  // recompute the IP checksum. 
+  ip_hdr->ip_sum = 0x0; 
+  ip_hdr->ip_sum = cksum(ip_hdr, sizeof(ip_hdr)); 
+
+  // if we don't yet know the destination MAC address, send a request and put
+  // the packet in the ARP queue. 
+  auto arpentry = m_arp.lookup(ip_h->ip_dst); 
+  if (arpentry == nullptr) { 
+    m_arp.queueRequest(ip_h->ip_dst, out_packet, fwd_iface->name);
+    return; 
+  }
+
+  // add the destination MAC, then send the packet. 
+  memcpy(out_eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN); 
+  sendPacket(out_packet, fwd_iface->name);
+  return; 
+}
+
+
+void SimpleRouter::send_icmp_t3_packet(Buffer &packet, 
+    const Interface* in_iface, uint8_t icmp_type, uint8_t icmp_code) 
+{
+  // initialize header pointers to the original packet. 
+  ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
+  ip_hdr *ip_h = (ip_hdr *) (packet.data() + sizeof(ethernet_hdr));
+
+  // copy the packet to a new outbound packet. 
+  size_t icmp_packet_size = sizeof(ethernet_hdr) + sizeof(ip_hdr)
+    + sizeof(icmp_t3_hdr); 
+  uint8_t *icmp_packet = (uint8_t *) malloc(icmp_packet_size); 
+  memcpy(icmp_packet, packet.data(), icmp_packet_size); 
+
+  // initialize header pointers for the outbound packet. 
+  ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
+  ip_hdr *icmp_ip_h = (ip_hdr *) (icmp_packet + sizeof(ethernet_hdr));
+  icmp_t3_hdr *icmp_icmp_t3_h = (icmp_t3_hdr *) (icmp_packet
+      + sizeof(ethernet_hdr) + sizeof(ip_hdr)); 
+
+  // return to sender, address unknown, no such number, no such zone. 
+  //       -- elvis presley
+  memcpy(icmp_eth_h->ether_shost, eth_h->ether_dhost, ETHER_ADDR_LEN); 
+  memcpy(icmp_eth_h->ether_dhost, eth_h->ether_shost, ETHER_ADDR_LEN); 
+  icmp_ip_h->ip_src = ip_h->ip_dst; 
+  icmp_ip_h->ip_dst = ip_h->ip_src; 
+
+  // initialize IP header fields. 
+  icmp_ip_h->ip_ttl = 64; 
+  icmp_ip_h->ip_p = ip_protocol_icmp; 
+  icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr)); // TODO big hdrs
+  icmp_ip_h->ip_sum = 0x0; 
+  icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
+
+  // fill in icmp header. 
+  icmp_icmp_t3_h->icmp_type = icmp_type; 
+  icmp_icmp_t3_h->icmp_code = icmp_code; 
+  icmp_icmp_t3_h->unused = 0x0; 
+  memcpy(icmp_icmp_t3_h->data, ip_h, ICMP_DATA_SIZE); 
+
+  // compute icmp checksum. 
+  icmp_icmp_t3_h->icmp_sum = 0x0;
+  icmp_icmp_t3_h->icmp_sum = cksum(icmp_icmp_t3_h, sizeof(icmp_t3_hdr));
+
+  // send the packet. 
+  Buffer outbound(icmp_packet, icmp_packet + icmp_packet_size); 
+  sendPacket(outbound, in_iface->name); 
+  free(icmp_packet); 
 }
 
 
