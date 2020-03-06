@@ -270,10 +270,10 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
 
   // decrement the outbound packet's TTL. 
   ip_hdr *out_ip_h = (ip_hdr *) (out_packet.data() + sizeof(ethernet_hdr)); 
-  ip_hdr->ip_ttl--; 
+  out_ip_h->ip_ttl--; 
   // recompute the IP checksum. 
-  ip_hdr->ip_sum = 0x0; 
-  ip_hdr->ip_sum = cksum(ip_hdr, sizeof(ip_hdr)); 
+  out_ip_h->ip_sum = 0x0; 
+  out_ip_h->ip_sum = cksum(ip_hdr, sizeof(ip_hdr)); 
 
   // if we don't yet know the destination MAC address, send a request and put
   // the packet in the ARP queue. 
