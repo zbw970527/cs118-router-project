@@ -259,7 +259,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   }
 
   // if a packet dies of old age, send a ICMP timeout response. 
-  if (ip_h->ip_ttl == 0){
+  if (ip_h->ip_ttl <= 1){
     send_icmp_t3_packet(packet, in_iface, 11, 0); 
   } 
 
