@@ -209,7 +209,8 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     icmp_ip_h->ip_sum = 0x0; 
     icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
 
-    // if inbound ICMP request is an echo request: 
+    /* Send Ping / Port Unreachable responses */
+
     if (icmp_icmp_h->icmp_type == 0x8) { 
       // send ICMP echo reply. 
       icmp_icmp_h->icmp_type = 0x0; // echo reply type
@@ -226,25 +227,8 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
       return; 
 
     } else { // not an echo request. 
-      // send ICMP port unreachable. 
-      icmp_t3_hdr *icmp_icmp_t3_h = (icmp_t3_hdr *) icmp_icmp_h; 
-      size_t icmp_packet_size = sizeof(ethernet_hdr) + sizeof(ip_hdr)
-        + sizeof(icmp_t3_hdr); 
-      icmp_packet = (uint8_t *) realloc(icmp_packet, icmp_packet_size); 
-
-      // fill in icmp-port-unreachable request. 
-      icmp_icmp_t3_h->icmp_type = 0x3; 
-      icmp_icmp_t3_h->icmp_code = 0x3; 
-      icmp_icmp_t3_h->unused = 0x0; 
-      memcpy(icmp_icmp_t3_h->data, ip_h, ICMP_DATA_SIZE); 
-
-      icmp_icmp_h->icmp_sum = 0x0;
-      icmp_icmp_h->icmp_sum = cksum(icmp_icmp_t3_h, sizeof(icmp_t3_hdr));
-
-      // send the packet. 
-      Buffer outbound(icmp_packet, icmp_packet + icmp_packet_size); 
-      sendPacket(outbound, in_iface->name); 
-      free(icmp_packet); 
+      // send ICMP port unreachable reply. 
+      send_icmp_t3_packet(packet, in_iface, 3, 3) ; 
       return; 
     }
   }
@@ -268,9 +252,9 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   }
 
   if (ip_h->ip_ttl == 0){
-    ; // TODO: discard packet, send ICMP timed out request. 
+    // send ICMP timeout response
+    send_icmp_t3_packet(packet, in_iface, 11, 0); 
   } 
-
 
   // prepare an output buffer for the output packet.
   Buffer out_packet(packet); 
@@ -288,6 +272,56 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
   // add the destination MAC, then send the packet. 
   memcpy(out_eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN); 
   sendPacket(out_packet, fwd_iface->name);
+}
+
+
+void SimpleRouter::send_icmp_t3_packet(Buffer &packet, 
+    const Interface* in_iface, uint8_t icmp_type, uint8_t icmp_code) 
+{
+  // initialize header pointers to the original packet. 
+  ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
+  ip_hdr *ip_h = (ip_hdr *) (packet.data() + sizeof(ethernet_hdr));
+
+  // copy the packet to a new outbound packet. 
+  size_t icmp_packet_size = sizeof(ethernet_hdr) + sizeof(ip_hdr)
+    + sizeof(icmp_t3_hdr); 
+  uint8_t *icmp_packet = (uint8_t *) malloc(icmp_packet_size); 
+  memcpy(icmp_packet, packet.data(), icmp_packet_size); 
+
+  // initialize header pointers for the outbound packet. 
+  ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
+  ip_hdr *icmp_ip_h = (ip_hdr *) (icmp_packet + sizeof(ethernet_hdr));
+  icmp_t3_hdr *icmp_icmp_t3_h = (icmp_t3_hdr *) (icmp_packet
+      + sizeof(ethernet_hdr) + sizeof(ip_hdr)); 
+
+  // return to sender, address unknown, no such number, no such zone. 
+  //       -- elvis presley
+  memcpy(icmp_eth_h->ether_shost, eth_h->ether_dhost, ETHER_ADDR_LEN); 
+  memcpy(icmp_eth_h->ether_dhost, eth_h->ether_shost, ETHER_ADDR_LEN); 
+  icmp_ip_h->ip_src = ip_h->ip_dst; 
+  icmp_ip_h->ip_dst = ip_h->ip_src; 
+
+  // initialize IP header fields. 
+  icmp_ip_h->ip_ttl = 64; 
+  icmp_ip_h->ip_p = ip_protocol_icmp; 
+  icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_t3_hdr); // TODO big hdrs
+  icmp_ip_h->ip_sum = 0x0; 
+  icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
+
+  // fill in icmp header. 
+  icmp_icmp_t3_h->icmp_type = icmp_type; 
+  icmp_icmp_t3_h->icmp_code = icmp_code; 
+  icmp_icmp_t3_h->unused = 0x0; 
+  memcpy(icmp_icmp_t3_h->data, ip_h, ICMP_DATA_SIZE); 
+
+  // compute icmp checksum. 
+  icmp_icmp_t3_h->icmp_sum = 0x0;
+  icmp_icmp_t3_h->icmp_sum = cksum(icmp_icmp_t3_h, sizeof(icmp_t3_hdr));
+
+  // send the packet. 
+  Buffer outbound(icmp_packet, icmp_packet + icmp_packet_size); 
+  sendPacket(outbound, in_iface->name); 
+  free(icmp_packet); 
 }
 
 

@@ -118,6 +118,8 @@ private:
           uint8_t* src_mac); 
   void handle_ip_packet(Buffer &packet, const Interface* in_iface,
           uint8_t* src_mac); 
+  void send_icmp_t3_packet(Buffer &packet, const Interface* in_iface, 
+          uint8_t icmp_type, uint8_t icmp_code); 
 };
 
 inline const RoutingTable&
