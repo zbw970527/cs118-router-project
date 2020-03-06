@@ -40,7 +40,6 @@ ArpCache::periodicCheckArpRequestsAndCacheEntries()
     /* Remove requests that have timed out */
 
     if (request->nTimesSent >= MAX_SENT_TIME) {
-      std::cerr << "-x- -x- -x- ARP REQUEST SENT TOO MANY TIMES -x- -x- -x-\n"; 
       iter = m_arpRequests.erase(iter);
       continue; // don't increment the iterator; we've deleted an entry. 
     }
@@ -76,11 +75,6 @@ ArpCache::periodicCheckArpRequestsAndCacheEntries()
 
     // send the packet. 
     m_router.sendPacket(curr_arp_packet, source_interface->name);
-
-    std::cerr << "<-- <-- <-- ETHERNET REQUEST --> --> -->" << std::endl;
-    print_hdr_eth(curr_arp_packet.data());
-    std::cerr << "<-- <-- <-- ARP REQUEST --> --> -->" << std::endl;
-    print_hdr_arp(curr_arp_packet.data() + sizeof(ethernet_hdr));
 
     // update the queued request's data. 
     request->timeSent = std::chrono::steady_clock::now();

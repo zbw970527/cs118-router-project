@@ -38,8 +38,6 @@ RoutingTable::lookup(uint32_t ip) const
     for( tableItem = m_entries.begin(); tableItem != m_entries.end(); ++tableItem){
       uint32_t incoming_addr = ip & tableItem->mask;
       uint32_t table_addr = tableItem->dest & tableItem->mask;
-      printf("%u\n", (unsigned int)ntohl(incoming_addr));
-      printf("%u\n", (unsigned int)ntohl(table_addr));
       if(incoming_addr == table_addr){ //match
         if(!found || result.mask <= tableItem -> mask){ // update result if no previously matched
           result = *tableItem;
