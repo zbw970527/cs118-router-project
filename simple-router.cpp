@@ -203,12 +203,28 @@ void SimpleRouter::handle_ip_packet(Buffer packet, Interface* in_iface,
     icmp_ip_h->ip_src = ip_h->ip_dst; 
     icmp_ip_h->ip_dst = ip_h->ip_src; 
 
-    icmp_ip_h->ip_ttl = 69; 
+    icmp_ip_h->ip_ttl = 64; 
+    icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_hdr); // TODO big hdrs
     icmp_ip_h->ip_sum = 0x0; 
-    icmp_ip_h->ip_len = sizeof(ip_hdr) + sizeof(icmp_hdr); // TODO
+    icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
 
-    // TODO: icmp code
 
+    // if inbound ICMP request is an echo request: 
+    if (icmp_icmp_h->icmp_type == 0x8) { 
+       icmp_icmp_h->icmp_type = 0x0; // echo reply
+       icmp_icmp_h->icmp_code = 0x0; 
+       icmp_icmp_h->icmp_sum = 0x0;
+       icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
+
+       Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
+           + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+
+       sendPacket(outbound, *in_iface); 
+       free(icmp_packet); 
+       return; 
+    }
+
+    // TODO: more icmp code
   }
 
   /* Forward packet */
