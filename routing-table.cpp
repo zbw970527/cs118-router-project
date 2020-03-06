@@ -30,22 +30,28 @@ namespace simple_router {
 RoutingTableEntry
 RoutingTable::lookup(uint32_t ip) const
 {
-  RoutingTableEntry *best_match = nullptr;
-  uint32_t highest_mask = 0; 
-
-  for(auto entry: m_entries){
-    if((ip & entry.mask) == (entry.dest & entry.mask)){ 
-      // compare the bitwise masks; more specific masks should be 'larger'. 
-      if (highest_mask <= entry.mask) { 
-        best_match = &entry; 
-        highest_mask = entry.mask; 
+  RoutingTableEntry result;
+  bool found = false;
+  // load the table and check. iterate from each table item in the table.
+  if(!m_entries.empty()){
+    std::list<RoutingTableEntry>::const_iterator tableItem;
+    for( tableItem = m_entries.begin(); tableItem != m_entries.end(); ++tableItem){
+      uint32_t incoming_addr = ip & tableItem->mask;
+      uint32_t table_addr = tableItem->dest & tableItem->mask;
+      printf("%u\n", (unsigned int)ntohl(incoming_addr));
+      printf("%u\n", (unsigned int)ntohl(table_addr));
+      if(incoming_addr == table_addr){ //match
+        if(!found || result.mask <= tableItem -> mask){ // update result if no previously matched
+          result = *tableItem;
+          found = true;
+        }
       }
     }
-  } 
+  }
+  if(!found)
+    throw std::runtime_error("Routing entry not found");
 
-  if (best_match != nullptr) 
-     return *best_match;
-  throw std::runtime_error("Routing entry not found"); 
+  return result;
 }
 
 //////////////////////////////////////////////////////////////////////////
