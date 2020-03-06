@@ -191,7 +191,7 @@ void SimpleRouter::handle_ip_packet(Buffer packet, const Interface* in_iface,
 
     // copy the packet. 
     uint8_t *icmp_packet = (uint8_t *) malloc(sizeof(ethernet_hdr)
-        + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+        + sizeof(ip_hdr) + sizeof(icmp_hdr) + sizeof(icmp_t3_hdr)); 
     ethernet_hdr *icmp_eth_h = (ethernet_hdr *) icmp_packet; 
     ip_hdr *icmp_ip_h = (ip_hdr *) (icmp_packet + sizeof(ethernet_hdr));
     icmp_hdr *icmp_icmp_h = (icmp_hdr *) (icmp_packet + sizeof(ethernet_hdr)
