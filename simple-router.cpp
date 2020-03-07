@@ -213,7 +213,7 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     icmp_ip_h->ip_dst = ip_h->ip_src; 
 
     icmp_ip_h->ip_ttl = 64; 
-    icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_hdr)); // TODO big hdrs
+    icmp_ip_h->ip_len = ip_h->ip_len; // TODO: why? what if packet longer?
     icmp_ip_h->ip_sum = 0x0; 
     icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
 
