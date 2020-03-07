@@ -163,6 +163,8 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
 { 
   ethernet_hdr *eth_h = (ethernet_hdr *) packet.data(); 
   ip_hdr *ip_h = (ip_hdr *) (packet.data() + sizeof(ethernet_hdr));
+  icmp_hdr *icmp_h = (icmp_hdr *) (packet.data() + sizeof(ethernet_hdr)
+      + sizeof(ip_hdr));
 
   /* Sanity check packet */
 
@@ -186,12 +188,19 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     m_arp.insertArpEntry(src_mac_vec, ip_h->ip_src);
   }
 
+  // if a packet dies of old age, send a ICMP timeout response. 
+  if (ip_h->ip_ttl <= 1){
+    send_icmp_t3_packet(packet, in_iface, 11, 0); 
+    return; 
+  } 
+
   /* Respond to router-bound packets */
 
   // check if the packet is destined for a router interface. 
   if (findIfaceByIp(ip_h->ip_dst) != nullptr) { 
-    if (ip_h->ip_p != ip_protocol_icmp) { 
-      fprintf(stderr, "Received IP packet, but unknown protocol, ignoring\n"); 
+    // if the packet is not an ICMP echo request, send ICMP unreachable. 
+    if (ip_h->ip_p != ip_protocol_icmp && icmp_h->icmp_type != 8) { 
+      send_icmp_t3_packet(packet, in_iface, 3, 3) ; 
       return; 
     }
 
@@ -219,26 +228,20 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
 
     /* Send Ping / Port Unreachable responses */
 
-    if (icmp_icmp_h->icmp_type == 0x8) { 
-      // send ICMP echo reply. 
-      icmp_icmp_h->icmp_type = 0x0; // echo reply type
-      icmp_icmp_h->icmp_code = 0x0; 
+    // send ICMP echo reply. 
+    icmp_icmp_h->icmp_type = 0x0; // echo reply type
+    icmp_icmp_h->icmp_code = 0x0; 
 
-      icmp_icmp_h->icmp_sum = 0x0;
-      icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
+    icmp_icmp_h->icmp_sum = 0x0;
+    icmp_icmp_h->icmp_sum = cksum(icmp_icmp_h, sizeof(icmp_hdr));
 
-      // send the packet. 
-      Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
-          + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
-      sendPacket(outbound, in_iface->name); 
-      free(icmp_packet); 
-      return; 
-
-    } else { // not an echo request. 
-      // send ICMP port unreachable reply. 
-      send_icmp_t3_packet(packet, in_iface, 3, 3) ; 
-      return; 
-    }
+    // send the packet. 
+    Buffer outbound(icmp_packet, icmp_packet + sizeof(ethernet_hdr)
+        + sizeof(ip_hdr) + sizeof(icmp_hdr)); 
+    print_hdrs(outbound); 
+    sendPacket(outbound, in_iface->name); 
+    free(icmp_packet); 
+    return; 
   }
 
   /* Forward packet */
@@ -257,11 +260,6 @@ void SimpleRouter::handle_ip_packet(Buffer &packet, const Interface* in_iface,
     fprintf(stderr, "Unknown outbound interface in routing table, dropping\n"); 
     return; 
   }
-
-  // if a packet dies of old age, send a ICMP timeout response. 
-  if (ip_h->ip_ttl <= 1){
-    send_icmp_t3_packet(packet, in_iface, 11, 0); 
-  } 
 
   // prepare an output buffer for the output packet.
   Buffer out_packet(packet); 
