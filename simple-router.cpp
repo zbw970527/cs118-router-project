@@ -309,14 +309,14 @@ void SimpleRouter::send_icmp_t3_packet(Buffer &packet,
 
   // return to sender, address unknown, no such number, no such zone. 
   //       -- elvis presley
-  memcpy(icmp_eth_h->ether_shost, eth_h->ether_dhost, ETHER_ADDR_LEN); 
-  memcpy(icmp_eth_h->ether_dhost, eth_h->ether_shost, ETHER_ADDR_LEN); 
-  icmp_ip_h->ip_src = ip_h->ip_dst; 
-  icmp_ip_h->ip_dst = ip_h->ip_src; 
+  memcpy(icmp_eth_h->ether_shost, eth_h->ether_dhost, ETHER_ADDR_LEN);
+  memcpy(icmp_eth_h->ether_dhost, eth_h->ether_shost, ETHER_ADDR_LEN);
+  icmp_ip_h->ip_src = in_iface->ip;
+  icmp_ip_h->ip_dst = ip_h->ip_src;
 
-  // initialize IP header fields. 
-  icmp_ip_h->ip_ttl = 64; 
-  icmp_ip_h->ip_p = ip_protocol_icmp; 
+  // initialize IP header fields.
+  icmp_ip_h->ip_ttl = 64;
+  icmp_ip_h->ip_p = ip_protocol_icmp;
   icmp_ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr)); // TODO big hdrs
   icmp_ip_h->ip_sum = 0x0; 
   icmp_ip_h->ip_sum = cksum(icmp_ip_h, sizeof(ip_hdr)); 
