@@ -4,14 +4,14 @@ UCLA CS118 Project (Simple Router)
 
 ## Project Team
 
-- Bowen Zhang, UID 905322977. Contributions include IP prefix lookup code and
-  the initial code skeleton for IP-packet handling. Special thanks are given
-  due to his dogged persistence when hunting the bugs nobody else could. 
-- Varun Pidugu, UID 704961666. Contributions include ARP cache management and
-  ARP-request sending code. 
+- Bowen Zhang, UID 905322977. Contributions include IP prefix lookup code,
+  IP-packet handling code, and ICMP message-passing code. Special thanks are
+  given due to his dogged persistence when hunting the bugs nobody else could. 
+- Varun Pidugu, UID 704961666. Contributions include ARP cache management,
+  ARP-request sending code, and IP packet handling code.
 - Yash Lala, UID 905159212. Contributions include Ethernet-frame handling code,
-  ARP-request handling code, ICMP-handling code, rewriting IP-packet code,
-  ARP-IP-packet-flushing code, and this README. 
+  ARP-request receiving code, ARP-IP-packet-flushing code, and bugfixes in IP
+  and ICMP handling code. 
 
 Remaining contributions can be found in the commit history. 
 
